@@ -5,10 +5,16 @@ import streamlit as st
 
 from main import DB_PATH, init_db
 
+CHAPTER_TITLES = [
+    "巻一：小雨の筆跡 (Hiragana y Katakana: Trazos de lluvia ligera)",
+    "巻二：墨に宿る影 (Kanji N5: Siluetas atrapadas en la tinta)",
+    "巻三：言の葉の水脈 (Gramática: El cauce donde fluyen las palabras)",
+    "巻四：記憶を導く灯台 (Código: El faro que guía el recuerdo)",
+]
+
 CHAPTERS = {
     "chapter_i": {
-        "volume": "巻 I: El Despertar",
-        "title": "Capítulo I — El Despertar de las Sílabas",
+        "title": CHAPTER_TITLES[0],
         "narrative": (
             "Avanzas por el sendero. Las formas básicas comienzan a tener sentido en tu mente."
         ),
@@ -16,8 +22,7 @@ CHAPTERS = {
         "goal_minutes": 300,
     },
     "chapter_ii": {
-        "volume": "巻 II: Los Primeros Trazos",
-        "title": "Capítulo II — Los Primeros Trazos",
+        "title": CHAPTER_TITLES[1],
         "narrative": (
             "Cada trazo que memorizas se convierte en un ancla dentro del pergamino de tu memoria."
         ),
@@ -25,8 +30,7 @@ CHAPTERS = {
         "goal_minutes": 400,
     },
     "chapter_iii": {
-        "volume": "巻 III: La Estructura del Mundo",
-        "title": "Capítulo III — La Estructura del Mundo",
+        "title": CHAPTER_TITLES[2],
         "narrative": (
             "Las reglas del idioma emergen como runas que conectan símbolos, sonidos y significado."
         ),
@@ -34,8 +38,7 @@ CHAPTERS = {
         "goal_minutes": 350,
     },
     "chapter_iv": {
-        "volume": "巻 IV: El Código del Artífice",
-        "title": "Capítulo IV — El Código del Artífice",
+        "title": CHAPTER_TITLES[3],
         "narrative": (
             "Forjas lógica y disciplina. Cada sesión refuerza el motor que impulsa tu progreso."
         ),
@@ -44,41 +47,72 @@ CHAPTERS = {
     },
 }
 
+TITLE_TO_CHAPTER = {chapter["title"]: chapter_id for chapter_id, chapter in CHAPTERS.items()}
+
 TOPIC_TO_CHAPTER = {
     topic: chapter_id
     for chapter_id, chapter in CHAPTERS.items()
     for topic in chapter["topics"]
 }
 
+# --- ESTILOS CSS INYECTADOS ---
 PARCHMENT_COPPER_STYLE = """
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Yuji+Syuku&display=swap');
+
     .stApp {
         background-color: #F4EBE1;
+        background-image:
+            radial-gradient(ellipse at center, rgba(244, 235, 225, 0.35) 0%, rgba(244, 235, 225, 0) 55%),
+            radial-gradient(ellipse at center, transparent 55%, rgba(44, 34, 27, 0.18) 100%);
         color: #2C221B;
-        font-family: 'Georgia', serif;
+        font-family: 'Yuji Syuku', 'Georgia', serif;
+        box-shadow:
+            inset 0 0 140px rgba(44, 34, 27, 0.22),
+            inset 0 0 280px rgba(92, 58, 33, 0.14);
     }
 
-    h1, h2, h3 {
-        color: #8A5A2B;
-        text-shadow: 1px 1px 0px rgba(184, 115, 51, 0.3);
+    .stApp,
+    .stApp p,
+    .stApp label,
+    .stApp span,
+    .stApp small,
+    [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMarkdownContainer"] span,
+    [data-testid="stWidgetLabel"] p,
+    [data-testid="stWidgetLabel"] label,
+    [data-testid="stCaptionContainer"],
+    [data-testid="stCaptionContainer"] p,
+    [data-testid="stProgressBar"] + div,
+    [data-testid="stProgressBar"] + div p,
+    .stProgress label,
+    .stProgress p,
+    div[data-testid="stTable"] *,
+    div[data-testid="stAlert"] p {
+        color: #2C221B !important;
+        font-family: 'Yuji Syuku', 'Georgia', serif;
+    }
+
+    h1, h2, h3, h4 {
+        color: #2C221B !important;
+        text-shadow: 1px 1px 0px rgba(184, 115, 51, 0.2);
         border-bottom: 2px solid #B87333;
         padding-bottom: 5px;
-        font-family: 'Georgia', serif;
+        font-family: 'Yuji Syuku', 'Georgia', serif;
     }
 
     .narrative-text {
-        color: #4A3728;
-        font-style: italic;
-        font-size: 1.05rem;
+        color: #2C221B !important;
+        font-size: 1.15rem;
         line-height: 1.6;
     }
 
     .flashcard-symbol {
         text-align: center;
-        font-size: 80px;
-        color: #2C221B;
+        font-size: 90px;
+        color: #2C221B !important;
         margin: 0.5rem 0 1rem 0;
-        font-family: 'Georgia', serif;
+        font-family: 'Yuji Syuku', 'Georgia', serif;
     }
 
     div[data-testid="stVerticalBlockBorderWrapper"] {
@@ -86,13 +120,52 @@ PARCHMENT_COPPER_STYLE = """
         border: 1px solid #B87333;
         border-radius: 8px;
         padding: 20px;
-        box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.1);
+        box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.08);
+    }
+
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="input"] input {
+        background-color: #FAF4ED !important;
+        border: 1px solid #B87333 !important;
+        color: #2C221B !important;
+        font-family: 'Yuji Syuku', 'Georgia', serif;
+    }
+
+    div[data-baseweb="select"] span,
+    div[data-baseweb="select"] svg {
+        color: #2C221B !important;
+        fill: #2C221B !important;
+    }
+
+    ul[role="listbox"] {
+        background-color: #FAF4ED !important;
+        border: 1px solid #B87333 !important;
+    }
+
+    ul[role="listbox"] li {
+        background-color: #FAF4ED !important;
+        color: #2C221B !important;
+        font-family: 'Yuji Syuku', 'Georgia', serif;
+    }
+
+    ul[role="listbox"] li:hover {
+        background-color: #F0E4D4 !important;
+        color: #2C221B !important;
+    }
+
+    div[data-testid="stProgressBar"] > div > div {
+        background-color: #D4C4B0 !important;
+    }
+
+    div[data-testid="stProgressBar"] > div > div > div {
+        background: linear-gradient(90deg, #B87333 0%, #8A5A2B 100%) !important;
     }
 
     div.stButton > button:first-child,
     div.stFormSubmitButton > button:first-child {
         background: linear-gradient(135deg, #B87333 0%, #8A5A2B 100%);
-        color: #F4EBE1;
+        color: #F4EBE1 !important;
         border: 2px solid #5C3A21;
         border-radius: 4px;
         box-shadow: 2px 2px 0px #5C3A21;
@@ -111,29 +184,22 @@ PARCHMENT_COPPER_STYLE = """
     }
 
     div[data-testid="stMetricValue"] {
-        color: #8A5A2B;
-        font-family: 'Georgia', serif;
-    }
-
-    div[data-baseweb="select"] > div,
-    div[data-baseweb="input"] > div {
-        background-color: #FAF4ED;
-        border-color: #B87333;
+        color: #2C221B !important;
+        font-family: 'Yuji Syuku', 'Georgia', serif;
     }
 </style>
 """
 
-
-def insert_session(arco_narrativo: str, duration_minutes: int) -> None:
+# --- LÓGICA DE BASE DE DATOS ---
+def insert_session(topic: str, duration_minutes: int) -> None:
     with sqlite3.connect(DB_PATH) as connection:
         connection.execute(
             """
             INSERT INTO study_sessions (session_timestamp, topic, duration_minutes)
             VALUES (?, ?, ?)
             """,
-            (datetime.now().isoformat(timespec="seconds"), arco_narrativo, duration_minutes),
+            (datetime.now().isoformat(timespec="seconds"), topic, duration_minutes),
         )
-
 
 def fetch_recent_sessions(limit: int = 5) -> list[tuple]:
     with sqlite3.connect(DB_PATH) as connection:
@@ -148,7 +214,6 @@ def fetch_recent_sessions(limit: int = 5) -> list[tuple]:
         )
         return cursor.fetchall()
 
-
 def fetch_chapter_minutes(chapter_id: str) -> int:
     topics = CHAPTERS[chapter_id]["topics"]
     placeholders = ", ".join("?" for _ in topics)
@@ -161,12 +226,10 @@ def fetch_chapter_minutes(chapter_id: str) -> int:
         cursor = connection.execute(query, topics)
         return int(cursor.fetchone()[0])
 
-
 def chapter_progress(chapter_id: str) -> int:
     studied_minutes = fetch_chapter_minutes(chapter_id)
     goal_minutes = CHAPTERS[chapter_id]["goal_minutes"]
     return min(int((studied_minutes / goal_minutes) * 100), 100)
-
 
 def chapter_label_for_topic(topic: str) -> str:
     chapter_id = TOPIC_TO_CHAPTER.get(topic)
@@ -174,7 +237,10 @@ def chapter_label_for_topic(topic: str) -> str:
         return topic
     return CHAPTERS[chapter_id]["title"]
 
+def chapter_id_from_title(title: str) -> str:
+    return TITLE_TO_CHAPTER[title]
 
+# --- INTERFAZ STREAMLIT ---
 init_db()
 
 st.set_page_config(page_title="Kioku Engine - The Journey", layout="centered")
@@ -187,22 +253,29 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-chapter_options = list(CHAPTERS.keys())
-selected_chapter = st.selectbox(
-    "Arco narrativo",
-    options=chapter_options,
-    format_func=lambda chapter_id: CHAPTERS[chapter_id]["title"],
-)
-
+selected_title = st.selectbox("Arco narrativo", options=CHAPTER_TITLES)
+selected_chapter = chapter_id_from_title(selected_title)
 chapter = CHAPTERS[selected_chapter]
 progress = chapter_progress(selected_chapter)
 
-st.markdown(f"### {chapter['volume']}")
-st.markdown(f"*{chapter['narrative']}*")
+# --- SECCIÓN DEL CAPÍTULO CON ÍCONO ---
+st.markdown("<br>", unsafe_allow_html=True) # Espacio extra
+
+col_icon, col_text = st.columns([1, 4]) # Proporción: 1 parte ícono, 4 partes texto
+with col_icon:
+    # AQUI VA TU IMAGEN IA. Cuando la tengas, comenta la línea de abajo y descomenta la de st.image
+    st.markdown("<div style='text-align: center; font-size: 60px; color: #8A5A2B;'>⛩️</div>", unsafe_allow_html=True)
+    # st.image("ruta_a_tu_imagen.png", use_container_width=True)
+
+with col_text:
+    st.markdown(f"### {chapter['title']}")
+    st.markdown(f"<p class='narrative-text'>{chapter['narrative']}</p>", unsafe_allow_html=True)
+
 st.progress(progress, text=f"Progreso del Capítulo: {progress}%")
 
 st.markdown("---")
 
+# --- REGISTRO DE SESIÓN ---
 with st.container(border=True):
     st.subheader("Registrar sesión de estudio")
     with st.form("study_session_form"):
@@ -222,6 +295,7 @@ with st.container(border=True):
 
 st.markdown("---")
 
+# --- SECCIÓN FLASHCARD ---
 with st.container(border=True):
     st.subheader("Prueba del sendero")
     st.markdown("*¿Qué significa este símbolo?*")
@@ -237,6 +311,7 @@ with st.container(border=True):
 
 st.markdown("---")
 
+# --- CRÓNICAS (HISTORIAL) ---
 st.subheader("Crónicas recientes")
 recent_sessions = fetch_recent_sessions()
 
