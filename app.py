@@ -1,329 +1,123 @@
-import sqlite3
-from datetime import datetime
-
 import streamlit as st
-
+import sqlite3
+import pandas as pd
+from datetime import datetime, timezone
+from fsrs_logic import KiokuScheduler
 from main import DB_PATH, init_db
 
-CHAPTER_TITLES = [
-    "巻一：小雨の筆跡 (Hiragana y Katakana: Trazos de lluvia ligera)",
-    "巻二：墨に宿る影 (Kanji N5: Siluetas atrapadas en la tinta)",
-    "巻三：言の葉の水脈 (Gramática: El cauce donde fluyen las palabras)",
-    "巻四：記憶を導く灯台 (Código: El faro que guía el recuerdo)",
-]
-
-CHAPTERS = {
-    "chapter_i": {
-        "title": CHAPTER_TITLES[0],
-        "narrative": (
-            "Avanzas por el sendero. Las formas básicas comienzan a tener sentido en tu mente."
-        ),
-        "topics": ["Hiragana", "Katakana"],
-        "goal_minutes": 300,
-    },
-    "chapter_ii": {
-        "title": CHAPTER_TITLES[1],
-        "narrative": (
-            "Cada trazo que memorizas se convierte en un ancla dentro del pergamino de tu memoria."
-        ),
-        "topics": ["Kanji N5"],
-        "goal_minutes": 400,
-    },
-    "chapter_iii": {
-        "title": CHAPTER_TITLES[2],
-        "narrative": (
-            "Las reglas del idioma emergen como runas que conectan símbolos, sonidos y significado."
-        ),
-        "topics": ["Grammar"],
-        "goal_minutes": 350,
-    },
-    "chapter_iv": {
-        "title": CHAPTER_TITLES[3],
-        "narrative": (
-            "Forjas lógica y disciplina. Cada sesión refuerza el motor que impulsa tu progreso."
-        ),
-        "topics": ["Code"],
-        "goal_minutes": 250,
-    },
-}
-
-TITLE_TO_CHAPTER = {chapter["title"]: chapter_id for chapter_id, chapter in CHAPTERS.items()}
-
-TOPIC_TO_CHAPTER = {
-    topic: chapter_id
-    for chapter_id, chapter in CHAPTERS.items()
-    for topic in chapter["topics"]
-}
-
-# --- ESTILOS CSS INYECTADOS ---
-PARCHMENT_COPPER_STYLE = """
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Yuji+Syuku&display=swap');
-
-    .stApp {
-        background-color: #F4EBE1;
-        background-image:
-            radial-gradient(ellipse at center, rgba(244, 235, 225, 0.35) 0%, rgba(244, 235, 225, 0) 55%),
-            radial-gradient(ellipse at center, transparent 55%, rgba(44, 34, 27, 0.18) 100%);
-        color: #2C221B;
-        font-family: 'Yuji Syuku', 'Georgia', serif;
-        box-shadow:
-            inset 0 0 140px rgba(44, 34, 27, 0.22),
-            inset 0 0 280px rgba(92, 58, 33, 0.14);
-    }
-
-    .stApp,
-    .stApp p,
-    .stApp label,
-    .stApp span,
-    .stApp small,
-    [data-testid="stMarkdownContainer"] p,
-    [data-testid="stMarkdownContainer"] span,
-    [data-testid="stWidgetLabel"] p,
-    [data-testid="stWidgetLabel"] label,
-    [data-testid="stCaptionContainer"],
-    [data-testid="stCaptionContainer"] p,
-    [data-testid="stProgressBar"] + div,
-    [data-testid="stProgressBar"] + div p,
-    .stProgress label,
-    .stProgress p,
-    div[data-testid="stTable"] *,
-    div[data-testid="stAlert"] p {
-        color: #2C221B !important;
-        font-family: 'Yuji Syuku', 'Georgia', serif;
-    }
-
-    h1, h2, h3, h4 {
-        color: #2C221B !important;
-        text-shadow: 1px 1px 0px rgba(184, 115, 51, 0.2);
-        border-bottom: 2px solid #B87333;
-        padding-bottom: 5px;
-        font-family: 'Yuji Syuku', 'Georgia', serif;
-    }
-
-    .narrative-text {
-        color: #2C221B !important;
-        font-size: 1.15rem;
-        line-height: 1.6;
-    }
-
-    .flashcard-symbol {
-        text-align: center;
-        font-size: 90px;
-        color: #2C221B !important;
-        margin: 0.5rem 0 1rem 0;
-        font-family: 'Yuji Syuku', 'Georgia', serif;
-    }
-
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #FAF4ED;
-        border: 1px solid #B87333;
-        border-radius: 8px;
-        padding: 20px;
-        box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.08);
-    }
-
-    div[data-baseweb="select"] > div,
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="input"] input {
-        background-color: #FAF4ED !important;
-        border: 1px solid #B87333 !important;
-        color: #2C221B !important;
-        font-family: 'Yuji Syuku', 'Georgia', serif;
-    }
-
-    div[data-baseweb="select"] span,
-    div[data-baseweb="select"] svg {
-        color: #2C221B !important;
-        fill: #2C221B !important;
-    }
-
-    ul[role="listbox"] {
-        background-color: #FAF4ED !important;
-        border: 1px solid #B87333 !important;
-    }
-
-    ul[role="listbox"] li {
-        background-color: #FAF4ED !important;
-        color: #2C221B !important;
-        font-family: 'Yuji Syuku', 'Georgia', serif;
-    }
-
-    ul[role="listbox"] li:hover {
-        background-color: #F0E4D4 !important;
-        color: #2C221B !important;
-    }
-
-    div[data-testid="stProgressBar"] > div > div {
-        background-color: #D4C4B0 !important;
-    }
-
-    div[data-testid="stProgressBar"] > div > div > div {
-        background: linear-gradient(90deg, #B87333 0%, #8A5A2B 100%) !important;
-    }
-
-    div.stButton > button:first-child,
-    div.stFormSubmitButton > button:first-child {
-        background: linear-gradient(135deg, #B87333 0%, #8A5A2B 100%);
-        color: #F4EBE1 !important;
-        border: 2px solid #5C3A21;
-        border-radius: 4px;
-        box-shadow: 2px 2px 0px #5C3A21;
-        font-family: 'Courier New', monospace;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        transition: all 0.2s ease;
-    }
-
-    div.stButton > button:first-child:hover,
-    div.stFormSubmitButton > button:first-child:hover {
-        background: linear-gradient(135deg, #8A5A2B 0%, #B87333 100%);
-        transform: translate(1px, 1px);
-        box-shadow: 1px 1px 0px #5C3A21;
-    }
-
-    div[data-testid="stMetricValue"] {
-        color: #2C221B !important;
-        font-family: 'Yuji Syuku', 'Georgia', serif;
-    }
-</style>
-"""
-
-# --- LÓGICA DE BASE DE DATOS ---
-def insert_session(topic: str, duration_minutes: int) -> None:
-    with sqlite3.connect(DB_PATH) as connection:
-        connection.execute(
-            """
-            INSERT INTO study_sessions (session_timestamp, topic, duration_minutes)
-            VALUES (?, ?, ?)
-            """,
-            (datetime.now().isoformat(timespec="seconds"), topic, duration_minutes),
-        )
-
-def fetch_recent_sessions(limit: int = 5) -> list[tuple]:
-    with sqlite3.connect(DB_PATH) as connection:
-        cursor = connection.execute(
-            """
-            SELECT id, session_timestamp, topic, duration_minutes
-            FROM study_sessions
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        )
-        return cursor.fetchall()
-
-def fetch_chapter_minutes(chapter_id: str) -> int:
-    topics = CHAPTERS[chapter_id]["topics"]
-    placeholders = ", ".join("?" for _ in topics)
-    query = f"""
-        SELECT COALESCE(SUM(duration_minutes), 0)
-        FROM study_sessions
-        WHERE topic IN ({placeholders})
-    """
-    with sqlite3.connect(DB_PATH) as connection:
-        cursor = connection.execute(query, topics)
-        return int(cursor.fetchone()[0])
-
-def chapter_progress(chapter_id: str) -> int:
-    studied_minutes = fetch_chapter_minutes(chapter_id)
-    goal_minutes = CHAPTERS[chapter_id]["goal_minutes"]
-    return min(int((studied_minutes / goal_minutes) * 100), 100)
-
-def chapter_label_for_topic(topic: str) -> str:
-    chapter_id = TOPIC_TO_CHAPTER.get(topic)
-    if chapter_id is None:
-        return topic
-    return CHAPTERS[chapter_id]["title"]
-
-def chapter_id_from_title(title: str) -> str:
-    return TITLE_TO_CHAPTER[title]
-
-# --- INTERFAZ STREAMLIT ---
+# --- INITIALIZATION ---
+scheduler = KiokuScheduler()
 init_db()
 
-st.set_page_config(page_title="Kioku Engine - The Journey", layout="centered")
-st.markdown(PARCHMENT_COPPER_STYLE, unsafe_allow_html=True)
+# --- UI CONFIGURATION & STYLES ---
+st.set_page_config(page_title="Kioku Engine - Research Edition", layout="wide")
 
+PARCHMENT_STYLE = """
+<style>
+    .flashcard-symbol { 
+        font-size: 90px; text-align: center; color: #2D1B13; 
+        background-color: #F5F1E6; padding: 30px;
+        border-radius: 15px; border: 2px solid #8A5A2B;
+    }
+    .metric-box {
+        background-color: #EFEBE9; padding: 15px;
+        border-radius: 10px; text-align: center; border-left: 5px solid #8A5A2B;
+    }
+    .narrative-text { font-style: italic; color: #5D4037; }
+</style>
+"""
+st.markdown(PARCHMENT_STYLE, unsafe_allow_html=True)
+
+# --- NARRATIVE DATA ---
+CHAPTERS = {
+    "chapter_i": {"title": "巻一：小雨の筆跡", "meaning": "Trazos de lluvia ligera", "narrative": "Las formas básicas comienzan a tener sentido."},
+    "chapter_ii": {"title": "巻二：墨に宿る影", "meaning": "Siluetas en la tinta", "narrative": "Cada trazo es un ancla en tu memoria."},
+    "chapter_iii": {"title": "巻三：言の葉の水脈", "meaning": "Cauce de palabras", "narrative": "Las reglas emergen como runas conectoras."},
+    "chapter_iv": {"title": "巻四：記憶を導く灯台", "meaning": "El faro del recuerdo", "narrative": "La lógica impulsa tu progreso científico."}
+}
+
+# --- SIDEBAR: SCIENTIFIC METRICS (XAI SECTION) ---
+with st.sidebar:
+    st.header("📊 Métricas de Retención")
+    stats = scheduler.get_memory_stats()
+    
+    st.markdown("---")
+    st.metric("Estabilidad Media (S)", f"{stats['avg_stability']:.1f} días", 
+              help="Tiempo estimado para que la probabilidad de recuerdo caiga al 90%.")
+    
+    st.metric("Dificultad Promedio (D)", f"{stats['avg_difficulty']:.1f}/10", 
+              help="Complejidad intrínseca de los términos en tu base de datos.")
+    
+    st.write(f"**Total de conocimiento:** {stats['total_cards']} términos")
+    st.progress(max(0, (stats['total_cards'] - stats['new_count']) / max(1, stats['total_cards'])), 
+                text="Madurez del Pergamino")
+    
+    st.caption("Basado en el modelo de memoria de 3 componentes de FSRS v6.")
+
+# --- MAIN INTERFACE ---
 st.title("Kioku Engine — The Journey")
-st.markdown(
-    "<p class='narrative-text'>Tu progreso queda inscrito en el pergamino. "
-    "Cada sesión avanza un capítulo de tu historia con el idioma.</p>",
-    unsafe_allow_html=True,
-)
+st.markdown(f"<p class='narrative-text'>Capítulo actual seleccionado: {CHAPTERS['chapter_i']['title']}</p>", unsafe_allow_html=True)
 
-selected_title = st.selectbox("Arco narrativo", options=CHAPTER_TITLES)
-selected_chapter = chapter_id_from_title(selected_title)
-chapter = CHAPTERS[selected_chapter]
-progress = chapter_progress(selected_chapter)
+col_main, col_stats = st.columns([3, 4])
 
-# --- SECCIÓN DEL CAPÍTULO CON ÍCONO ---
-st.markdown("<br>", unsafe_allow_html=True) # Espacio extra
-
-col_icon, col_text = st.columns([1, 4]) # Proporción: 1 parte ícono, 4 partes texto
-with col_icon:
-    # AQUI VA TU IMAGEN IA. Cuando la tengas, comenta la línea de abajo y descomenta la de st.image
-    st.markdown("<div style='text-align: center; font-size: 60px; color: #8A5A2B;'>⛩️</div>", unsafe_allow_html=True)
-    # st.image("ruta_a_tu_imagen.png", use_container_width=True)
-
-with col_text:
-    st.markdown(f"### {chapter['title']}")
-    st.markdown(f"<p class='narrative-text'>{chapter['narrative']}</p>", unsafe_allow_html=True)
-
-st.progress(progress, text=f"Progreso del Capítulo: {progress}%")
-
-st.markdown("---")
-
-# --- REGISTRO DE SESIÓN ---
-with st.container(border=True):
-    st.subheader("Registrar sesión de estudio")
-    with st.form("study_session_form"):
-        topic = st.selectbox("Enfoque del capítulo", chapter["topics"])
-        duration_minutes = st.number_input(
-            "Duración (minutos)",
-            min_value=1,
-            step=1,
-            value=30,
-        )
-        submitted = st.form_submit_button("Inscribir en el pergamino")
-
-    if submitted:
-        insert_session(topic, int(duration_minutes))
-        st.success("Sesión registrada. El pergamino ha sido actualizado.")
-        st.rerun()
-
-st.markdown("---")
-
-# --- SECCIÓN FLASHCARD ---
-with st.container(border=True):
+with col_main:
+    # 1. CORE SECTION: REVIEW SESSION
     st.subheader("Prueba del sendero")
-    st.markdown("*¿Qué significa este símbolo?*")
-    st.markdown("<p class='flashcard-symbol'>水</p>", unsafe_allow_html=True)
+    due_cards = scheduler.get_due_cards()
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.button("Fuego")
-    with col2:
-        st.button("Agua")
-    with col3:
-        st.button("Tierra")
+    if not due_cards:
+        st.success("¡Tu mente está al día! No hay pendientes en el pergamino. 🌸")
+    else:
+        current_card = due_cards
+        card_id, front, back = current_card, current_card[3], current_card[4]
+
+        with st.container(border=True):
+            st.markdown(f"<div class='flashcard-symbol'>{front}</div>", unsafe_allow_html=True)
+            
+            if "show_answer" not in st.session_state: st.session_state.show_answer = False
+
+            if not st.session_state.show_answer:
+                if st.button("Revelar conocimiento", use_container_width=True):
+                    st.session_state.show_answer = True
+                    st.rerun()
+            else:
+                st.markdown(f"### **Significado:** {back}")
+                st.write("¿Qué tan bien lo recordaste?")
+                
+                c1, c2, c3, c4 = st.columns(4)
+                ratings = [("Otra vez", 1), ("Difícil", 2), ("Bien", 3), ("Fácil", 4)]
+                for i, (label, val) in enumerate(ratings):
+                    with [c1, c2, c3, c4][i]:
+                        if st.button(label, key=f"btn_{val}"):
+                            scheduler.update_card(card_id, val)
+                            st.session_state.show_answer = False
+                            st.rerun()
+
+with col_stats:
+    # 2. MINI DASHBOARD
+    st.subheader("Estado de la Memoria")
+    if due_cards:
+        # Calculate current Retrievability (R) for the top card
+        # Formula: R = (1 + elapsed_days / (9 * stability))^-1
+        s = current_card[5] # stability index
+        e = current_card[6] # elapsed_days index
+        retrievability = (1 + e / (9 * s))**-1 if s > 0 else 1.0
+        
+        st.write(f"**Retentividad Actual:** {retrievability*100:.1f}%")
+        st.info(f"💡 Este término tiene una dificultad de {current_card[7]:.1f}/10.")
+    else:
+        st.write("Sin datos de sesión activa.")
 
 st.markdown("---")
 
-# --- CRÓNICAS (HISTORIAL) ---
-st.subheader("Crónicas recientes")
-recent_sessions = fetch_recent_sessions()
+# 3. ADD NEW KNOWLEDGE
+with st.expander("Inscribir nuevo conocimiento"):
+    with st.form("new_card"):
+        f, b = st.text_input("Kanji"), st.text_input("Significado")
+        if st.form_submit_button("Inscribir") and f and b:
+            with sqlite3.connect(DB_PATH) as conn:
+                conn.execute("INSERT INTO cards (front, back, due) VALUES (?, ?, ?)",
+                             (f, b, datetime.now(timezone.utc).isoformat()))
+            st.rerun()
 
-if recent_sessions:
-    st.table(
-        {
-            "ID": [row[0] for row in recent_sessions],
-            "Registrado": [row[1] for row in recent_sessions],
-            "Arco narrativo": [chapter_label_for_topic(row[2]) for row in recent_sessions],
-            "Enfoque": [row[2] for row in recent_sessions],
-            "Duración (min)": [row[3] for row in recent_sessions],
-        }
-    )
-else:
-    st.info("Aún no hay sesiones inscritas en el pergamino.")
+st.caption("Kioku Engine v2.1 | Powered by FSRS v6 | Research-ready for MEXT Scholarship")
